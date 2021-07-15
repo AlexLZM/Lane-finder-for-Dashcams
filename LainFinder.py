@@ -6,7 +6,7 @@ import matplotlib.image as mpimg
 import glob
 from moviepy.editor import VideoFileClip
 
-
+# class for left and right line for processing the whole video
 class Line():
     def __init__(self, side):
         # was the line detected in the last iteration?
@@ -41,6 +41,7 @@ class Line():
         self.offset = 0
         self.saturation = False
         
+    # initiation: find pixels and fit a curve
     def fit_polynomial(self, warped):
         """
         warped has size: height, width; single channel, binary image
@@ -98,7 +99,7 @@ class Line():
         
 
             
-
+    # if a curve is already found, search along the curve for pixels and update the curve
     def search(self, warped):
         """
         warped has size: height, width; single channel, binary image
@@ -125,7 +126,7 @@ class Line():
             self.detected = False
             self.error = True
     
-    
+    # smoothing the change of the curve by n frames
     def smoothing(self, n):
         if len(self.recent_xfitted)>=n:
             xs = self.recent_xfitted[-n:]
@@ -137,7 +138,7 @@ class Line():
                 self.best_fit.append(self.current_fit)
 
 
-
+# undistort and unwarp to bird view
 def corners_unwarp(img, mtx=mtx, dist=dist, M=M):
 
     img_size = (img.shape[1], img.shape[0])
@@ -147,7 +148,7 @@ def corners_unwarp(img, mtx=mtx, dist=dist, M=M):
                                 img_size, flags=cv2.INTER_LINEAR)
     return warped
 
-
+# process the image and return a binary image with lane pixels (in majority)
 def binary(image, h=(1,60),s=(120,255), sob_thresh=(12,100), w=170,sobel_kernel=5, blur_kernel=9):
     
     hls = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
@@ -169,6 +170,7 @@ def binary(image, h=(1,60),s=(120,255), sob_thresh=(12,100), w=170,sobel_kernel=
             ] = 1
     return combined
 
+# if binary process failed to find lane, try saturation filter to find the lane
 def saturation(image, s=(120,255)):
     hls = cv2.cvtColor(image, cv2.COLOR_RGB2HLS)
     S = hls[:,:,2]
@@ -179,14 +181,14 @@ def saturation(image, s=(120,255)):
             ] = 1
     return combined
 
+# find the binary image, undistort and unwarp to bird view
 def binary_unwarp(image, func=binary):
     undst = cv2.undistort(image, mtx, dist, None, mtx)
     binary_unwarp = func(image) #*255
-#     channels = np.dstack((b, b, b))
     warped = corners_unwarp(binary_unwarp)
     return warped, undst
 
-
+# after find the lane, draw the lane area over the original image
 def mark_image(undist, invM):
     color_warp = np.zeros_like(undist).astype(np.uint8)
 
@@ -208,6 +210,7 @@ def mark_image(undist, invM):
     else:
         return undist
 
+# mark the pixel search result on the bird view binary image
 def mark_poly(warped):
     out_img = np.dstack((warped,warped,warped))*255
     
@@ -257,7 +260,7 @@ def mark_poly(warped):
     return result
         
         
-        
+# check if the curve is valid, if not , reinitiate       
 def check():
     diffs = right_line.current_xfitted - left_line.current_xfitted
     if left_line.error or right_line.error:
@@ -289,7 +292,8 @@ def check():
         right_line.detected = False
         return False, diffs
     return True, diffs
-        
+
+# calculate the curvature and offset of the lane        
 def  calculate_r_offset(warped, checked):
     # positive offset means car in left to the lane's midline
     if checked:
@@ -311,6 +315,8 @@ def  calculate_r_offset(warped, checked):
     else:
         return left_line.r,left_line.offset
 
+    
+# Combine the bird view with overlayed original and text information 
 def combine_add_text(overlay, marked_warped, r, offset, checked, diffs):
     r = left_line.r
     offset = left_line.offset
